@@ -15,13 +15,13 @@ Lightweight continuous batching OpenAI compatibility using HuggingFace Transform
 Using PIP with git,
 
 ```bash
-pip3 install git+https://github.com/mesolitica/transformers-openai-api
+pip3 install git+https://github.com/malaysia-ai/transformers-openai-api
 ```
 
 Or you can git clone,
 
 ```bash
-git clone https://github.com/mesolitica/transformers-openai-api && cd transformers-openai-api
+git clone https://github.com/malaysia-ai/transformers-openai-api && cd transformers-openai-api
 ```
 
 ## how to local

@@ -10,6 +10,6 @@ setuptools.setup(
     python_requires='>=3.8',
     description='OpenAI compatibility using FastAPI HuggingFace Transformers.',
     author='huseinzol05',
-    url='https://github.com/mesolitica/transformers-openai-api',
+    url='https://github.com/malaysia-ai/transformers-openai-api',
     include_package_data=True
 )
