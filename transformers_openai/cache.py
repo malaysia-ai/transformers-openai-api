@@ -193,12 +193,12 @@ class StaticLengthEncoderDecoderCache(Cache):
         self.device = device
         self.queue = UserQueue(batch_size)
 
-        self.encoder_cache_shape = (
+        encoder_cache_shape = (
             encoder_head_size,
             encoder_max_length,
             encoder_dim_size // encoder_head_size
         )
-        self.decoder_cache_shape = (
+        decoder_cache_shape = (
             decoder_head_size,
             decoder_max_length,
             decoder_dim_size // decoder_head_size
@@ -284,12 +284,11 @@ class StaticLengthEncoderDecoderCache(Cache):
         cache_position = cache_kwargs.get("cache_position")
         
         keys, values = [], []
-        keys = torch.zeros(len(self.current_position), )
         for i in range(len(self.current_position)):
             k_out = self.key_cache[layer_idx][self.current_position[i]]
             v_out = self.value_cache[layer_idx][self.current_position[i]]
-            k_out.index_copy_(2, cache_position[i], key_states[i])
-            v_out.index_copy_(2, cache_position[i], key_states[i])
+            k_out[:, cache_position[i]] = key_states[i].clone()
+            v_out[:, cache_position[i]] = value_states[i].clone()
             keys.append(k_out)
             values.append(v_out)
         
