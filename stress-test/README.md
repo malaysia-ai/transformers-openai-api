@@ -5,7 +5,7 @@
 Rate of 5 users per second, total requests up to 50 users for 60 seconds,
 
 ```bash
-locust -f t5.py -P 7001 -H http://localhost:7088 -r 5 -u 50 -t 60
+locust -f t5.py -P 7001 -H http://localhost:7088 -r 1 -u 50 -t 60
 ```
 
 ![alt text](t5.png)

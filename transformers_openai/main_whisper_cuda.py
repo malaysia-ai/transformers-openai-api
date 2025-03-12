@@ -5,6 +5,7 @@ from transformers_openai.base_model import (
     TranscriptionJsonResponse,
 )
 from transformers_openai.function import (
+    profiler,
     sample,
     pad_hidden_encoder,
     efficient_attention_mask,
@@ -23,6 +24,7 @@ from transformers_openai.cache import (
 from fastapi import Request
 from sse_starlette import ServerSentEvent
 from torchaudio.io import StreamReader
+from contextlib import nullcontext
 from datetime import datetime
 import re
 import numpy as np
@@ -69,9 +71,11 @@ device = args.device
 prefill_queue = asyncio.Queue()
 step_queue = asyncio.Queue()
 
-def predict_language(model, labels, langs_none):
-    labels = labels.repeat(len(langs_none), 1)
-    langs_none = torch.concat(langs_none, dim=0)
+prefill_input_ids = torch.tensor([50258, 0, 50360, 50365], device = device)
+predict_language_input_ids = torch.tensor([50258], device = device)
+
+def predict_language(model, langs_none):
+    labels = predict_language_input_ids.repeat(len(langs_none), 1)
     with torch.no_grad():
         out_decoder = model.model.decoder(
             labels,
@@ -176,7 +180,7 @@ async def prefill():
             batch = []
             while not prefill_queue.empty():
                 try:
-                    request = await asyncio.wait_for(prefill_queue.get(), timeout=1e-4)
+                    request = prefill_queue.get_nowait()
                     batch.append(request)
                     if args.static_cache:
                         l = global_cache.queue.available_slots()
@@ -185,13 +189,13 @@ async def prefill():
                     if len(batch) >= l:
                         need_sleep = False
                         break
-                except asyncio.TimeoutError:
+                except asyncio.QueueEmpty:
                     break
 
             if not len(batch):
                 continue
 
-            logging.debug(f'{str(datetime.now())} prefill batch size of {len(batch)}')
+            logging.info(f'{str(datetime.now())} prefill batch size of {len(batch)}')
 
             futures = [batch[i][0] for i in range(len(batch))]
             langs = [batch[i][1] for i in range(len(batch))]
@@ -199,80 +203,80 @@ async def prefill():
             uuids = [batch[i][5] for i in range(len(batch))]
 
             with torch.no_grad():
-                inputs = processor(
-                    inputs,
-                    sampling_rate=sample_rate,
-                    device = device,
-                )
-                inputs = inputs['input_features'].type(model.dtype)
-                out_encoder = model.model.encoder(inputs)
-                out_encoder = out_encoder[0]
-                langs_none_map, langs_none = {}, []
-                index = 0
-                for i in range(len(langs)):
-                    if langs[i] is None or langs[i] == 'none' or langs[i] == 'null':
-                        langs_none_map[index] = i
-                        langs_none.append(out_encoder[i:i + 1])
-                        index += 1
+                context = profiler('whisper-prefill') if args.torch_profiling and args.ready else nullcontext()
+                with context as prof:
 
-                if len(langs_none):
-                    labels = tokenizer(
-                        '<|startoftranscript|>',
-                        add_special_tokens=False,
-                        return_tensors='pt',
-                    ).to('cuda')['input_ids']
-                    proj = predict_language(model, labels, langs_none)
-
-                    langs_none = tokenizer.batch_decode(proj)
-                    langs_none = [l[2:-2] for l in langs_none]
-                    for k, v in langs_none_map.items():
-                        langs[v] = langs_none[k]
-
-                prompt_ids = []
-                for lang in langs:
-                    lang_token = tokenizer.encode(f'<|{lang}|>', add_special_tokens=False)[0]
-                    prompt_ids.append([50258, lang_token, 50360, 50365])
-
-                inputs = torch.tensor(prompt_ids).to('cuda')
-                out, out_logits = prefill_step(model, inputs, out_encoder)
-                out_caches = out[1]
-
-                if args.static_cache:
-                    for i in range(len(uuids)):
-                        index = global_cache.queue.enter(uuids[i])
-                        for k in range(len(out_caches)):
-                            arange = torch.arange(out_caches[k][0][i].shape[1], device=device)
-                            global_cache.key_cache[k][index][:, arange, :] = out_caches[k][0][i].clone()
-                            global_cache.value_cache[k][index][:, arange, :] = out_caches[k][1][i].clone()
-                            global_cache.cross_key_cache[k][index][:, :, :] = out_caches[k][2][i].clone()
-                            global_cache.cross_value_cache[k][index][:, :, :] = out_caches[k][3][i].clone()
-                else:
-                    cache_exists = len(global_cache.key_cache) > 0
-                    for k in range(len(out_caches)):
-                        key_cache = {}
-                        value_cache = {}
-                        cross_key_cache = {}
-                        cross_value_cache = {}
-
-                        for i in range(len(batch)):
-                            key_cache[uuids[i]] = out_caches[k][0][i: i + 1]
-                            value_cache[uuids[i]] = out_caches[k][1][i: i + 1]
-                            cross_key_cache[uuids[i]] = out_caches[k][2][i: i + 1]
-                            cross_value_cache[uuids[i]] = out_caches[k][3][i: i + 1]
-
-                        if cache_exists:
-                            global_cache.key_cache[k].update(key_cache)
-                            global_cache.value_cache[k].update(value_cache)
-                            global_cache.cross_key_cache[k].update(cross_key_cache)
-                            global_cache.cross_value_cache[k].update(cross_value_cache)
+                    langs_none_map = {}
+                    indices = []
+                    index = 0
+                    for i in range(len(langs)):
+                        if langs[i] is None or langs[i] == 'none' or langs[i] == 'null':
+                            langs_none_map[index] = i
+                            indices.append(index)
+                            index += 1
+                            token_id = 0
                         else:
-                            global_cache.key_cache.append(key_cache)
-                            global_cache.value_cache.append(value_cache)
-                            global_cache.cross_key_cache.append(cross_key_cache)
-                            global_cache.cross_value_cache.append(cross_value_cache)
+                            token_id = tokenizer._added_tokens_encoder[f'<|{langs[i]}|>']
+                        langs[i] = token_id
+                    
+                    indices = torch.tensor(indices, device = device)
+                    langs = torch.tensor(langs, device = device)
 
-                for i in range(len(futures)):
-                    futures[i].set_result((out_logits[i: i + 1], out_encoder[i:i + 1], langs[i]))
+                    inputs = processor(
+                        inputs,
+                        sampling_rate=sample_rate,
+                    )
+                    inputs = inputs['input_features'].type(model.dtype).to(device, non_blocking = True)
+                    out_encoder = model.model.encoder(inputs)
+                    out_encoder = out_encoder[0]
+                    if len(langs_none_map):
+                        proj = predict_language(model, out_encoder[indices])
+                        for k, v in langs_none_map.items():
+                            langs[v] = proj[k, 0]
+
+                    input_ids = prefill_input_ids.repeat(len(langs), 1)
+                    for i in range(len(langs)):
+                        input_ids[i, 1] = langs[i]
+
+                    out, out_logits = prefill_step(model, input_ids, out_encoder)
+                    out_caches = out[1]
+
+                    if args.static_cache:
+                        for i in range(len(uuids)):
+                            index = global_cache.queue.enter(uuids[i])
+                            for k in range(len(out_caches)):
+                                arange = torch.arange(out_caches[k][0][i].shape[1], device=device)
+                                global_cache.key_cache[k][index][:, arange, :] = out_caches[k][0][i].clone()
+                                global_cache.value_cache[k][index][:, arange, :] = out_caches[k][1][i].clone()
+                                global_cache.cross_key_cache[k][index][:, :, :] = out_caches[k][2][i].clone()
+                                global_cache.cross_value_cache[k][index][:, :, :] = out_caches[k][3][i].clone()
+                    else:
+                        cache_exists = len(global_cache.key_cache) > 0
+                        for k in range(len(out_caches)):
+                            key_cache = {}
+                            value_cache = {}
+                            cross_key_cache = {}
+                            cross_value_cache = {}
+
+                            for i in range(len(batch)):
+                                key_cache[uuids[i]] = out_caches[k][0][i: i + 1]
+                                value_cache[uuids[i]] = out_caches[k][1][i: i + 1]
+                                cross_key_cache[uuids[i]] = out_caches[k][2][i: i + 1]
+                                cross_value_cache[uuids[i]] = out_caches[k][3][i: i + 1]
+
+                            if cache_exists:
+                                global_cache.key_cache[k].update(key_cache)
+                                global_cache.value_cache[k].update(value_cache)
+                                global_cache.cross_key_cache[k].update(cross_key_cache)
+                                global_cache.cross_value_cache[k].update(cross_value_cache)
+                            else:
+                                global_cache.key_cache.append(key_cache)
+                                global_cache.value_cache.append(value_cache)
+                                global_cache.cross_key_cache.append(cross_key_cache)
+                                global_cache.cross_value_cache.append(cross_value_cache)
+
+                    for i in range(len(futures)):
+                        futures[i].set_result((out_logits[i: i + 1], out_encoder[i:i + 1], langs[i]))
 
         except Exception as e:
             logging.warning(f"Error in prefill: {e}")
@@ -292,18 +296,18 @@ async def step():
             batch = []
             while not step_queue.empty():
                 try:
-                    request = await asyncio.wait_for(step_queue.get(), timeout=1e-6)
+                    request = step_queue.get_nowait()
                     batch.append(request)
                     if len(batch) >= args.continuous_batching_batch_size:
                         need_sleep = False
                         break
-                except asyncio.TimeoutError:
+                except asyncio.QueueEmpty:
                     break
 
             if not len(batch):
                 continue
 
-            logging.debug(f'{str(datetime.now())} step batch size of {len(batch)}')
+            logging.info(f'{str(datetime.now())} step batch size of {len(batch)}')
 
             futures = [batch[i][0] for i in range(len(batch))]
             langs = [batch[i][1] for i in range(len(batch))]
@@ -321,21 +325,23 @@ async def step():
             else:
                 max_len = max(lengths)
             with torch.no_grad():
-                inputs = torch.concat(inputs, dim=0)
-                out_encoder = pad_hidden_encoder(out_encoders)
-                attention_mask = efficient_attention_mask(
-                    batch_size=len(lengths),
-                    max_len=max_len,
-                    lengths=lengths,
-                    device=device,
-                    dtype=torch_dtype,
-                    ones=False,
-                )
-                position_ids = torch.tensor([[l - 1 for l in lengths]]).T.to(device)
-                out_logits = decode_one_tokens(model, inputs, attention_mask, out_encoder, position_ids)
+                context = profiler('whisper-step') if args.torch_profiling and args.ready else nullcontext()
+                with context as prof:
+                    inputs = torch.concat(inputs, dim=0)
+                    out_encoder = pad_hidden_encoder(out_encoders)
+                    attention_mask = efficient_attention_mask(
+                        batch_size=len(lengths),
+                        max_len=max_len,
+                        lengths=lengths,
+                        device=device,
+                        dtype=torch_dtype,
+                        ones=False,
+                    )
+                    position_ids = torch.tensor([[l - 1 for l in lengths]], device = device).T
+                    out_logits = decode_one_tokens(model, inputs, attention_mask, out_encoder, position_ids)
 
-                for i in range(len(futures)):
-                    futures[i].set_result((out_logits[i: i + 1],))
+                    for i in range(len(futures)):
+                        futures[i].set_result((out_logits[i: i + 1],))
 
         except Exception as e:
             print(traceback.format_exc())
@@ -373,7 +379,7 @@ async def generate(
 
     # minus 4 because ['<|startoftranscript|>', lang token, '<|transcribe|>', '<|0.0|>'] tokens
     try:
-        for k in range(model.config.max_length - 4):
+        for k in range(model.config.max_target_positions - 4):
             if k == 0:
                 q = prefill_queue
             else:

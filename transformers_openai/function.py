@@ -2,6 +2,16 @@ import torch
 import torch.nn.functional as F
 from typing import Optional
 
+profiler = lambda x: torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+        record_shapes=True,
+        with_stack=True,
+        profile_memory=True,
+        with_flops=True,
+        with_modules=True,
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(x)
+)
+
 def prefill_attention_mask_flatten(seq_lens, dtype=torch.bfloat16, causal=True):
     masks = []
     for l in seq_lens:

@@ -6,3 +6,5 @@ dist
 build
 *.egg-info
 *.whl
+whisper-step
+whisper-prefill

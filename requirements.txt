@@ -1,6 +1,6 @@
 accelerate
 bitsandbytes
-transformers>=4.42
+transformers>=4.47
 tokenizers
 evaluate
 scipy

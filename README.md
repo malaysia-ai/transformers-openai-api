@@ -34,14 +34,13 @@ python3 -m transformers_openai.main --help
 
 ```text
 usage: main.py [-h] [--host HOST] [--port PORT] [--loglevel LOGLEVEL] [--model-type MODEL_TYPE]
-               [--tokenizer-type TOKENIZER_TYPE] [--tokenizer-use-fast TOKENIZER_USE_FAST]
-               [--processor-type PROCESSOR_TYPE] [--hf-model HF_MODEL] [--torch-dtype TORCH_DTYPE]
-               [--architecture-type {decoder,encoder-decoder}] [--serving-type {chat,whisper}]
-               [--continuous-batching-microsleep CONTINUOUS_BATCHING_MICROSLEEP]
+               [--tokenizer-type TOKENIZER_TYPE] [--tokenizer-use-fast TOKENIZER_USE_FAST] [--processor-type PROCESSOR_TYPE]
+               [--hf-model HF_MODEL] [--torch-dtype TORCH_DTYPE] [--architecture-type {decoder,encoder-decoder}]
+               [--serving-type {chat,whisper}] [--continuous-batching-microsleep CONTINUOUS_BATCHING_MICROSLEEP]
                [--continuous-batching-batch-size CONTINUOUS_BATCHING_BATCH_SIZE] [--static-cache STATIC_CACHE]
                [--static-cache-encoder-max-length STATIC_CACHE_ENCODER_MAX_LENGTH]
                [--static-cache-decoder-max-length STATIC_CACHE_DECODER_MAX_LENGTH] [--accelerator-type ACCELERATOR_TYPE]
-               [--max-concurrent MAX_CONCURRENT] [--torch-autograd-profiling TORCH_AUTOGRAD_PROFILING] [--hqq HQQ]
+               [--max-concurrent MAX_CONCURRENT] [--torch-profiling TORCH_PROFILING] [--hqq HQQ]
                [--torch-compile TORCH_COMPILE]
 
 Configuration parser
@@ -67,11 +66,10 @@ options:
   --serving-type {chat,whisper}
                         Serving type (default: chat, env: SERVING_TYPE)
   --continuous-batching-microsleep CONTINUOUS_BATCHING_MICROSLEEP
-                        microsleep to group continuous batching, 1 / 1e-4 = 10k steps for one second (default: 0.0001,
-                        env: CONTINUOUS_BATCHING_MICROSLEEP)
+                        microsleep to group continuous batching, 1 / 1e-4 = 10k steps for one second (default: 0.0001, env:
+                        CONTINUOUS_BATCHING_MICROSLEEP)
   --continuous-batching-batch-size CONTINUOUS_BATCHING_BATCH_SIZE
-                        maximum of batch size during continuous batching (default: 20, env:
-                        CONTINUOUS_BATCHING_BATCH_SIZE)
+                        maximum of batch size during continuous batching (default: 20, env: CONTINUOUS_BATCHING_BATCH_SIZE)
   --static-cache STATIC_CACHE
                         Preallocate KV Cache for faster inference (default: False, env: STATIC_CACHE)
   --static-cache-encoder-max-length STATIC_CACHE_ENCODER_MAX_LENGTH
@@ -82,9 +80,9 @@ options:
                         Accelerator type (default: cuda, env: ACCELERATOR_TYPE)
   --max-concurrent MAX_CONCURRENT
                         Maximum concurrent requests (default: 100, env: MAX_CONCURRENT)
-  --torch-autograd-profiling TORCH_AUTOGRAD_PROFILING
+  --torch-profiling TORCH_PROFILING
                         Use torch.autograd.profiler.profile() to profile prefill and step (default: False, env:
-                        TORCH_AUTOGRAD_PROFILING)
+                        TORCH_PROFILING)
   --hqq HQQ             int4 quantization using HQQ (default: False, env: HQQ)
   --torch-compile TORCH_COMPILE
                         Torch compile necessary forwards, can speed up at least 1.5X (default: False, env: TORCH_COMPILE)
@@ -243,7 +241,7 @@ python3 -m transformers_openai.main \
 --model-type transformers_openai.models.WhisperForConditionalGeneration \
 --processor-type transformers_openai.models.WhisperFeatureExtractor \
 --serving-type whisper \
---hf-model openai/whisper-large-v3 \
+--hf-model openai/whisper-large-v3-turbo \
 --tokenizer-use-fast false
 ```
 
@@ -257,7 +255,7 @@ python3 -m transformers_openai.main \
 --model-type transformers_openai.models.WhisperForConditionalGeneration \
 --processor-type transformers_openai.models.WhisperFeatureExtractor \
 --serving-type whisper \
---hf-model openai/whisper-large-v3 \
+--hf-model openai/whisper-large-v3-turbo \
 --tokenizer-use-fast false \
 --static-cache true \
 --static-cache-encoder-max-length 1500 --static-cache-decoder-max-length 446 \

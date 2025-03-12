@@ -97,10 +97,10 @@ def parse_arguments():
         help='Maximum concurrent requests (default: %(default)s, env: MAX_CONCURRENT)'
     )
     parser.add_argument(
-        '--torch-autograd-profiling',
+        '--torch-profiling',
         type=lambda x: x.lower() == 'true',
-        default=os.environ.get('TORCH_AUTOGRAD_PROFILING', 'false').lower() == 'true',
-        help='Use torch.autograd.profiler.profile() to profile prefill and step (default: %(default)s, env: TORCH_AUTOGRAD_PROFILING)'
+        default=os.environ.get('TORCH_PROFILING', 'false').lower() == 'true',
+        help='Use torch.autograd.profiler.profile() to profile prefill and step (default: %(default)s, env: TORCH_PROFILING)'
     )
     parser.add_argument(
         '--hqq', type=lambda x: x.lower() == 'true',
@@ -130,7 +130,6 @@ def parse_arguments():
 
 
 args = parse_arguments()
-
+args.ready = False
 logging.basicConfig(level=args.loglevel)
-
 logging.info(f'Serving app using {args}')

@@ -51,7 +51,7 @@ if args.serving_type == 'whisper':
     async def audio_transcriptions_main(
         file: bytes = File(),
         model: str = Form('base'),
-        language: str = Form(None),
+        language: str = Form('None'),
         response_format: str = Form('text'),
         timestamp_granularities: str = Form('segment'),
         stream: bool = Form(False),
@@ -103,43 +103,50 @@ async def shutdown_event():
     except asyncio.CancelledError:
         pass
 
-if args.torch_compile and args.static_cache:
-    if args.serving_type == 'whisper':
-        async def warm(index=0, repeat=2):
-            logging.info(f'{index} warming up whisper torch compile static cache')
-            
-            """
-            file = BytesIO()
-            sample_rate = 16000
-            samples = np.zeros((30 * sample_rate,)).astype(np.int16)
-            with wave.open(file, 'wb') as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)  
-                wf.setframerate(sample_rate)
-                wf.writeframes(samples.tobytes())
-            file.seek(0)
-            """
+if args.serving_type == 'whisper':
+    async def warm(index=0, repeat=2):
+        logging.info(f'{index} warming up whisper torch compile static cache')
+        
+        """
+        file = BytesIO()
+        sample_rate = 16000
+        samples = np.zeros((30 * sample_rate,)).astype(np.int16)
+        with wave.open(file, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)  
+            wf.setframerate(sample_rate)
+            wf.writeframes(samples.tobytes())
+        file.seek(0)
+        """
 
-            file = os.path.join(os.path.dirname(__file__), 'warmup.wav')
-            for k in range(repeat):
-                generator = audio_completions(
-                    file=file,
-                    language=None,
-                    stream=True,
-                    request={'uuid': f'{index}-{k}'}
-                )
-                r = await generator
-                async for t in r:
-                    logging.info(f'{index} {k} {t}')
+        file = os.path.join(os.path.dirname(__file__), 'warmup.wav')
+        for k in range(repeat):
+            generator = audio_completions(
+                file=file,
+                language=None,
+                stream=True,
+                request={'uuid': f'{index}-{k}'}
+            )
+            r = await generator
+            async for t in r:
+                logging.info(f'{index} {k} {t}')
 
-        @app.on_event('startup')
-        async def warmup():
-            for i in range(1, args.continuous_batching_batch_size + 1, 1):
-                tasks = []
-                for index in range(i):
-                    task = asyncio.create_task(warm(index=index))
-                    tasks.append(task)
-                await asyncio.gather(*tasks)
+    @app.on_event('startup')
+    async def warmup():
+        if args.torch_compile and args.static_cache:
+            repeat = 2
+            batch_size = args.continuous_batching_batch_size + 1
+        else:
+            repeat = 1
+            batch_size = 2
+        for i in range(1, batch_size, 1):
+            tasks = []
+            for index in range(i):
+                task = asyncio.create_task(warm(index=index, repeat=repeat))
+                tasks.append(task)
+            await asyncio.gather(*tasks)
+        
+        args.ready = True
 
 if __name__ == "__main__":
     uvicorn.run(
