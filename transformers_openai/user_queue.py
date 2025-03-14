@@ -18,7 +18,6 @@ class AsyncUserQueue:
                 if slot is None:
                     self.users[i] = user_id
                     return i
-            raise ValueError("Queue is full")
 
     async def leave(self, user_id: str) -> None:
         async with self.lock:
@@ -55,7 +54,6 @@ class UserQueue:
             if slot is None:
                 self.users[i] = user_id
                 return i
-        raise ValueError("Queue is full")
 
     def leave(self, user_id: str) -> None:
         try:

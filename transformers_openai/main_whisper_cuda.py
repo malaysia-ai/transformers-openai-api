@@ -190,12 +190,15 @@ async def prefill():
             batch = []
             while not prefill_queue.empty():
                 try:
-                    request = prefill_queue.get_nowait()
-                    batch.append(request)
                     if args.static_cache:
                         l = global_cache.queue.available_slots()
                     else:
                         l = args.continuous_batching_batch_size
+                    if l == 0:
+                        await asyncio.sleep(1e-4)
+                        continue
+                    request = prefill_queue.get_nowait()
+                    batch.append(request)
                     if len(batch) >= l:
                         need_sleep = False
                         break
