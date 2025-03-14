@@ -14,49 +14,47 @@ class InsertMiddleware:
     def __init__(self, app, max_concurrent=50):
         self.app = app
         self.max_concurrent = max_concurrent
-        self.semaphore = asyncio.Semaphore(max_concurrent)
         self.queue = deque()
 
     async def process_request(self, scope, receive, send):
-        async with self.semaphore:
 
-            log = f"Received request {scope['request']['uuid']} in queue {scope['request']['time_in_queue']} seconds"
-            logging.info(log)
+        log = f"Received request {scope['request']['uuid']} in queue {scope['request']['time_in_queue']} seconds"
+        logging.info(log)
 
-            queue = asyncio.Queue()
+        queue = asyncio.Queue()
 
-            async def message_poller(sentinel, handler_task):
-                nonlocal queue
-                while True:
-                    message = await receive()
-                    if message["type"] == "http.disconnect":
-                        handler_task.cancel()
-                        return sentinel
-                    await queue.put(message)
+        async def message_poller(sentinel, handler_task):
+            nonlocal queue
+            while True:
+                message = await receive()
+                if message["type"] == "http.disconnect":
+                    handler_task.cancel()
+                    return sentinel
+                await queue.put(message)
 
-            sentinel = object()
-            handler_task = asyncio.create_task(self.app(scope, queue.get, send))
-            asyncio.create_task(message_poller(sentinel, handler_task))
+        sentinel = object()
+        handler_task = asyncio.create_task(self.app(scope, queue.get, send))
+        asyncio.create_task(message_poller(sentinel, handler_task))
 
-            try:
-                await handler_task
-                if 'time_max_tokens' in scope['request']:
-                    time_taken_first_token = scope['request']['time_first_token'] - \
-                        scope['request']['after_queue']
-                    time_taken_max_tokens = scope['request']['time_max_tokens'] - \
-                        scope['request']['time_first_token']
-                    tps = scope['request']['total_tokens'] / time_taken_max_tokens
+        try:
+            await handler_task
+            if 'time_max_tokens' in scope['request']:
+                time_taken_first_token = scope['request']['time_first_token'] - \
+                    scope['request']['after_queue']
+                time_taken_max_tokens = scope['request']['time_max_tokens'] - \
+                    scope['request']['after_queue']
+                tps = scope['request']['total_tokens'] / time_taken_max_tokens
 
-                    if 'total_seconds' in scope['request']:
-                        sps = scope['request']['total_seconds'] / time_taken_max_tokens
-                        extra_whisper = f', Seconds Per Second {sps}'
-                    else:
-                        extra_whisper = ''
+                if 'total_seconds' in scope['request']:
+                    sps = scope['request']['total_seconds'] / time_taken_max_tokens
+                    extra_whisper = f', Seconds Per Second {sps}'
+                else:
+                    extra_whisper = ''
 
-                    s = f"Complete {scope['request']['uuid']}, time first token {time_taken_first_token} seconds, time taken {time_taken_max_tokens} seconds, TPS {tps}{extra_whisper}"
-                    logging.info(s)
-            except asyncio.CancelledError:
-                logging.warning(f"Cancelling {scope['request']['uuid']} due to disconnect")
+                s = f"Complete {scope['request']['uuid']}, time first token {time_taken_first_token} seconds, time taken {time_taken_max_tokens} seconds, TPS {tps}{extra_whisper}"
+                logging.info(s)
+        except asyncio.CancelledError:
+            logging.warning(f"Cancelling {scope['request']['uuid']} due to disconnect")
                 
 
     async def __call__(self, scope, receive, send):
@@ -68,12 +66,6 @@ class InsertMiddleware:
             'uuid': str(uuid.uuid4()),
             'before_queue': time.time()
         }
-
-        if self.semaphore.locked():
-            logging.debug(f"{scope['request']['uuid']} waiting for queue.")
-            future = asyncio.Future()
-            self.queue.append(future)
-            await future
 
         scope['request']['after_queue'] = time.time()
         scope['request']['time_in_queue'] = scope['request']['after_queue'] - \

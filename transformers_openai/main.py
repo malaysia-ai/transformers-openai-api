@@ -105,7 +105,7 @@ async def shutdown_event():
 
 if args.serving_type == 'whisper':
     async def warm(index=0, repeat=2):
-        logging.info(f'{index} warming up whisper torch compile static cache')
+        logging.info(f'{index} warming up whisper')
         
         """
         file = BytesIO()
@@ -133,13 +133,16 @@ if args.serving_type == 'whisper':
 
     @app.on_event('startup')
     async def warmup():
-        if args.torch_compile and args.static_cache:
+        if args.torch_compile:
             repeat = 2
-            batch_size = args.continuous_batching_batch_size + 1
+            batch_size = args.continuous_batching_batch_size
         else:
             repeat = 1
-            batch_size = 2
-        for i in range(1, batch_size, 1):
+            batch_size = 1
+        
+        logging.info(f'warming up batch size of {batch_size} and repeat {repeat}')
+
+        for i in range(1, batch_size + 1, 1):
             tasks = []
             for index in range(i):
                 task = asyncio.create_task(warm(index=index, repeat=repeat))

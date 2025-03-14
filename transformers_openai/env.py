@@ -112,6 +112,10 @@ def parse_arguments():
         default=os.environ.get('TORCH_COMPILE', 'true').lower() == 'false',
         help='Torch compile necessary forwards, can speed up at least 1.5X (default: %(default)s, env: TORCH_COMPILE)'
     )
+    parser.add_argument(
+        '--torch-compile-mode', default=os.environ.get('TORCH_COMPILE_MODE', 'reduce-overhead'),
+        help='torch compile type (default: %(default)s, env: TORCH_COMPILE_MODE)'
+    )
 
     args = parser.parse_args()
 

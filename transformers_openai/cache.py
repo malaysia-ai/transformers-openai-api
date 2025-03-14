@@ -228,31 +228,28 @@ class StaticLengthEncoderDecoderCache(Cache):
                 e_key_caches.append(e_key_cache)
                 e_value_caches.append(e_value_cache)
 
-                # e_key_cache[:, :, :] = existing_cache[k][2][i].clone()
-                # e_value_cache[:, :, :] = existing_cache[k][3][i].clone()
-
             self.key_cache.append(key_caches)
             self.value_cache.append(value_caches)
             self.cross_key_cache.append(e_key_caches)
             self.cross_value_cache.append(e_value_caches)
+        
+        self.k = torch.zeros(batch_size, *decoder_cache_shape, dtype=self.dtype, device=self.device)
+        self.v = torch.zeros(batch_size, *decoder_cache_shape, dtype=self.dtype, device=self.device)
+        self.e_k = torch.zeros(batch_size, *encoder_cache_shape, dtype=self.dtype, device=self.device)
+        self.e_v = torch.zeros(batch_size, *encoder_cache_shape, dtype=self.dtype, device=self.device)
 
+        self._parameters = {}
+        self._modules = {}
+        self._buffers = {}
 
     def get_cross_kv(self, layer_idx):
-        if layer_idx < len(self):
-            keys, values = [], []
-            for i in range(len(self.current_position)):
-                keys.append(self.key_cache[layer_idx][self.current_position[i]])
-                values.append(self.value_cache[layer_idx][self.current_position[i]])
-            return torch.stack(keys, 0), torch.stack(values, 0)
-        else:
-            raise KeyError(
-                f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+        l = len(self.current_position)
+        for i in range(l):
+            self.e_k[i] = self.cross_key_cache[layer_idx][self.current_position[i]]
+            self.e_v[i] = self.cross_value_cache[layer_idx][self.current_position[i]]
+        return self.e_k[:l], self.e_v[:l]
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
-        """
-        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
-        sequence length.
-        """
         if layer_idx < len(self):
             if self.whisper_mode:
                 return (
@@ -283,16 +280,16 @@ class StaticLengthEncoderDecoderCache(Cache):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position")
         
-        keys, values = [], []
-        for i in range(len(self.current_position)):
+        l = len(self.current_position)
+        for i in range(l):
             k_out = self.key_cache[layer_idx][self.current_position[i]]
             v_out = self.value_cache[layer_idx][self.current_position[i]]
-            k_out[:, cache_position[i]] = key_states[i].clone()
-            v_out[:, cache_position[i]] = value_states[i].clone()
-            keys.append(k_out)
-            values.append(v_out)
+            k_out.index_copy_(1, cache_position[i], key_states[i])
+            v_out.index_copy_(1, cache_position[i], value_states[i])
+            self.k[i] = k_out
+            self.v[i] = v_out
         
-        return torch.stack(keys, 0), torch.stack(values, 0)
+        return self.k[:l], self.v[:l]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""

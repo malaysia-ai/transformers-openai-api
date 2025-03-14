@@ -161,14 +161,24 @@ def load_model():
         AutoHQQHFModel.set_auto_linear_tags(model.model.decoder)
         prepare_for_inference(model.model.decoder, backend='torchao_int4')
     
-    if args.torch_compile and args.static_cache:
-        logging.info('enabling torch compile for whisper static cache')
+    if args.torch_compile:
+        if not args.static_cache:
+            logging.warning('using dynamic cache for torch compile, performance will impact severely.')
         model.model.encoder.forward = torch.compile(
             model.model.encoder.forward,
         )
-        predict_language = torch.compile(predict_language, mode='reduce-overhead', fullgraph=True)
-        prefill_step = torch.compile(prefill_step, mode='reduce-overhead', fullgraph=True)
-        decode_one_tokens = torch.compile(decode_one_tokens, mode='reduce-overhead', fullgraph=True)
+        predict_language = torch.compile(
+            predict_language, 
+            mode=args.torch_compile_mode, fullgraph=True,
+        )
+        prefill_step = torch.compile(
+            prefill_step, 
+            mode=args.torch_compile_mode, fullgraph=True,
+        )
+        decode_one_tokens = torch.compile(
+            decode_one_tokens, 
+            mode=args.torch_compile_mode, fullgraph=True,
+        )
 
 async def prefill():
     need_sleep = True
