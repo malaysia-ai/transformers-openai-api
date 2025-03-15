@@ -9,7 +9,7 @@ SPIECE_UNDERLINE = "▁"
 
 def load_hf_model():
     if 't5' in args.model_type.lower() and 'transformers_openai.models' not in args.model_type:
-        raise Exception('We only support `--model-type transformers_openai.models.T5ForConditionalGeneration` for T5.')
+        raise ValueError('We only support `--model-type transformers_openai.models.T5ForConditionalGeneration` for T5.')
 
     if '.' in args.model_type:
         module_name, class_name = args.model_type.rsplit('.', 1)
@@ -25,7 +25,7 @@ def load_hf_model():
     else:
         return class_.from_pretrained(
             args.hf_model,
-            attn_implementation='sdpa',
+            attn_implementation=args.attn_implementation,
             torch_dtype=getattr(torch, args.torch_dtype),
         ).eval().to(args.device)
 

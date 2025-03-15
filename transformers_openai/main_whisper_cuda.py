@@ -208,7 +208,7 @@ async def prefill():
             if not len(batch):
                 continue
 
-            logging.info(f'{str(datetime.now())} prefill batch size of {len(batch)}')
+            logging.debug(f'{str(datetime.now())} prefill batch size of {len(batch)}')
 
             futures = [batch[i][0] for i in range(len(batch))]
             langs = [batch[i][1] for i in range(len(batch))]
@@ -320,7 +320,7 @@ async def step():
             if not len(batch):
                 continue
 
-            logging.info(f'{str(datetime.now())} step batch size of {len(batch)}')
+            logging.debug(f'{str(datetime.now())} step batch size of {len(batch)}')
 
             futures = [batch[i][0] for i in range(len(batch))]
             langs = [batch[i][1] for i in range(len(batch))]

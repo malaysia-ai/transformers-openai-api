@@ -44,6 +44,10 @@ def parse_arguments():
         help='Hugging Face model (default: %(default)s, env: HF_MODEL)'
     )
     parser.add_argument(
+        '--accelerator-type', default=os.environ.get('ACCELERATOR_TYPE', 'cuda'),
+        help='Accelerator type (default: %(default)s, env: ACCELERATOR_TYPE)'
+    )
+    parser.add_argument(
         '--torch-dtype', default=os.environ.get('TORCH_DTYPE', 'bfloat16'),
         help='Torch data type (default: %(default)s, env: TORCH_DTYPE)'
     )
@@ -87,14 +91,14 @@ def parse_arguments():
         help='Maximum concurrent requests (default: %(default)s, env: STATIC_CACHE_DECODER_MAX_LENGTH)'
     )
     parser.add_argument(
-        '--accelerator-type', default=os.environ.get('ACCELERATOR_TYPE', 'cuda'),
-        help='Accelerator type (default: %(default)s, env: ACCELERATOR_TYPE)'
+        '--pagedattention', type=lambda x: x.lower() == 'true',
+        default=os.environ.get('PAGEDATTENTION', 'false').lower() == 'true',
+        help='Use PagedAttention + Flash Attention faster inference (default: %(default)s, env: STATIC_CACHE)'
     )
     parser.add_argument(
-        '--max-concurrent',
-        type=int,
-        default=int(os.environ.get('MAX_CONCURRENT', '100')),
-        help='Maximum concurrent requests (default: %(default)s, env: MAX_CONCURRENT)'
+        '--pagedattention-block-size', type=int,
+        default=int(os.environ.get('PAGEDATTENTION_BLOCK_SIZE', '256')),
+        help='PagedAttention block size (default: %(default)s, env: PAGED_ATTENTION_BLOCK_SIZE)'
     )
     parser.add_argument(
         '--torch-profiling',
@@ -118,6 +122,14 @@ def parse_arguments():
     )
 
     args = parser.parse_args()
+
+    if args.static_cache and args.pagedattention:
+        raise ValueError('cannot set `--static-cache` and `--pagedattention` at the same time.')
+
+    if args.pagedattention:
+        args.attn_implementation = 'flash_attention_2'
+    else:
+        args.attn_implementation = 'sdpa'
 
     if args.hf_model is None:
         raise ValueError('must set `--hf-model` or `HF_MODEL` environment variable.')

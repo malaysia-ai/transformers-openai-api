@@ -8,3 +8,4 @@ build
 *.whl
 whisper-step
 whisper-prefill
+transformers-openai.json

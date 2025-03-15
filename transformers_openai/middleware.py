@@ -18,9 +18,6 @@ class InsertMiddleware:
 
     async def process_request(self, scope, receive, send):
 
-        log = f"Received request {scope['request']['uuid']} in queue {scope['request']['time_in_queue']} seconds"
-        logging.info(log)
-
         queue = asyncio.Queue()
 
         async def message_poller(sentinel, handler_task):
@@ -39,10 +36,8 @@ class InsertMiddleware:
         try:
             await handler_task
             if 'time_max_tokens' in scope['request']:
-                time_taken_first_token = scope['request']['time_first_token'] - \
-                    scope['request']['after_queue']
-                time_taken_max_tokens = scope['request']['time_max_tokens'] - \
-                    scope['request']['after_queue']
+                time_taken_first_token = scope['request']['time_first_token'] - scope['request']['time_in']
+                time_taken_max_tokens = scope['request']['time_max_tokens'] - scope['request']['time_in']
                 tps = scope['request']['total_tokens'] / time_taken_max_tokens
 
                 if 'total_seconds' in scope['request']:
@@ -64,12 +59,8 @@ class InsertMiddleware:
 
         scope['request'] = {
             'uuid': str(uuid.uuid4()),
-            'before_queue': time.time()
+            'time_in': time.time()
         }
-
-        scope['request']['after_queue'] = time.time()
-        scope['request']['time_in_queue'] = scope['request']['after_queue'] - \
-            scope['request']['before_queue']
 
         await self.process_request(scope, receive, send)
 

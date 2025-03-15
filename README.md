@@ -41,7 +41,7 @@ usage: main.py [-h] [--host HOST] [--port PORT] [--loglevel LOGLEVEL] [--model-t
                [--static-cache-encoder-max-length STATIC_CACHE_ENCODER_MAX_LENGTH]
                [--static-cache-decoder-max-length STATIC_CACHE_DECODER_MAX_LENGTH] [--accelerator-type ACCELERATOR_TYPE]
                [--max-concurrent MAX_CONCURRENT] [--torch-profiling TORCH_PROFILING] [--hqq HQQ]
-               [--torch-compile TORCH_COMPILE]
+               [--torch-compile TORCH_COMPILE] [--torch-compile-mode TORCH_COMPILE_MODE]
 
 Configuration parser
 
@@ -66,7 +66,7 @@ options:
   --serving-type {chat,whisper}
                         Serving type (default: chat, env: SERVING_TYPE)
   --continuous-batching-microsleep CONTINUOUS_BATCHING_MICROSLEEP
-                        microsleep to group continuous batching, 1 / 1e-4 = 10k steps for one second (default: 0.0001, env:
+                        microsleep to group continuous batching, 1 / 1e-4 = 10k steps for one second (default: 0.001, env:
                         CONTINUOUS_BATCHING_MICROSLEEP)
   --continuous-batching-batch-size CONTINUOUS_BATCHING_BATCH_SIZE
                         maximum of batch size during continuous batching (default: 20, env: CONTINUOUS_BATCHING_BATCH_SIZE)
@@ -86,6 +86,8 @@ options:
   --hqq HQQ             int4 quantization using HQQ (default: False, env: HQQ)
   --torch-compile TORCH_COMPILE
                         Torch compile necessary forwards, can speed up at least 1.5X (default: False, env: TORCH_COMPILE)
+  --torch-compile-mode TORCH_COMPILE_MODE
+                        torch compile type (default: reduce-overhead, env: TORCH_COMPILE_MODE)
 ```
 
 **We support both args and OS environment**.
@@ -245,7 +247,24 @@ python3 -m transformers_openai.main \
 --tokenizer-use-fast false
 ```
 
-#### Torch compile static cache
+#### Static Cache
+
+```bash
+python3 -m transformers_openai.main \
+--host 0.0.0.0 --port 7088 \
+--model-type transformers_openai.models.WhisperForConditionalGeneration \
+--processor-type transformers_openai.models.WhisperFeatureExtractor \
+--serving-type whisper \
+--hf-model openai/whisper-large-v3-turbo \
+--tokenizer-use-fast false \
+--static-cache true \
+--static-cache-encoder-max-length 1500 --static-cache-decoder-max-length 446 \
+--continuous-batching-batch-size 50
+```
+
+#### Torch compile static Cache
+
+**Currently under performed**,
 
 To use Torch compile, you must use static cache,
 
